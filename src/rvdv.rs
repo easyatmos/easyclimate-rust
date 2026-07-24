@@ -563,7 +563,7 @@ pub fn ddvfidf_batch(
 
     let mut out = vec![0.0f64; batch * stride];
 
-    // ✅ 释放 GIL + ✅ 并行按 batch 切片计算
+    // Rayon parallelism over batch slices. The Python wrapper keeps the GIL.
     let iers: Vec<i32> = {
         out.par_chunks_mut(stride)
             .enumerate()
@@ -589,6 +589,68 @@ pub fn ddvfidf_batch(
     let out_arr = ndarray::ArrayD::from_shape_vec(out_shape, out)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("reshape failed: {e}")))?;
 
+    Ok((out_arr.into_pyarray(py).to_owned().into(), ier))
+}
+
+/// Serial batch divergence for callers that provide outer parallelism.
+#[pyfunction]
+pub fn ddvfidf_batch_noreyon(
+    py: Python<'_>,
+    u: PyReadonlyArrayDyn<f64>,
+    v: PyReadonlyArrayDyn<f64>,
+    glat: PyReadonlyArray1<f64>,
+    glon: PyReadonlyArray1<f64>,
+    iopt: i32,
+    xmsg: f64,
+    re: f64,
+) -> PyResult<(Py<PyArrayDyn<f64>>, i32)> {
+    let u = u.as_array();
+    let v = v.as_array();
+    if u.shape() != v.shape() || u.ndim() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "u and v must have the same shape with ndim>=2",
+        ));
+    }
+    let nlat = u.shape()[u.ndim() - 2];
+    let mlon = u.shape()[u.ndim() - 1];
+    let out_shape = u.shape().to_vec();
+    let batch: usize = u.shape()[..u.ndim() - 2].iter().product();
+    let stride = nlat * mlon;
+    let glat = glat.as_slice()?;
+    let glon = glon.as_slice()?;
+    let u_cow = (!u.is_standard_layout()).then(|| u.to_owned());
+    let v_cow = (!v.is_standard_layout()).then(|| v.to_owned());
+    let u_data = u_cow.as_ref().map_or_else(
+        || u.as_slice().expect("standard layout must be contiguous"),
+        |array| array.as_slice().unwrap(),
+    );
+    let v_data = v_cow.as_ref().map_or_else(
+        || v.as_slice().expect("standard layout must be contiguous"),
+        |array| array.as_slice().unwrap(),
+    );
+
+    let (out, ier) = py.detach(move || {
+        let mut out = vec![0.0; batch * stride];
+        let mut ier = 0;
+        for b in 0..batch {
+            let start = b * stride;
+            let u_view =
+                ndarray::ArrayView2::from_shape((nlat, mlon), &u_data[start..start + stride])
+                    .unwrap();
+            let v_view =
+                ndarray::ArrayView2::from_shape((nlat, mlon), &v_data[start..start + stride])
+                    .unwrap();
+            let (result, current_ier) =
+                calc_ddvfidf_core(&u_view, &v_view, glat, glon, xmsg, iopt, re);
+            out[start..start + stride].copy_from_slice(result.as_slice().unwrap());
+            if ier == 0 && current_ier != 0 {
+                ier = current_ier;
+            }
+        }
+        (out, ier)
+    });
+    let out_arr = ndarray::ArrayD::from_shape_vec(out_shape, out)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("reshape failed: {e}")))?;
     Ok((out_arr.into_pyarray(py).to_owned().into(), ier))
 }
 
@@ -652,7 +714,7 @@ pub fn dvrfidf_batch(
 
     let mut out = vec![0.0f64; batch * stride];
 
-    // ✅ 释放 GIL + ✅ 并行按 batch 切片计算
+    // Rayon parallelism over batch slices. The Python wrapper keeps the GIL.
     let iers: Vec<i32> = {
         out.par_chunks_mut(stride)
             .enumerate()
@@ -678,5 +740,67 @@ pub fn dvrfidf_batch(
     let out_arr = ndarray::ArrayD::from_shape_vec(out_shape, out)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("reshape failed: {e}")))?;
 
+    Ok((out_arr.into_pyarray(py).to_owned().into(), ier))
+}
+
+/// Serial batch vorticity for callers that provide outer parallelism.
+#[pyfunction]
+pub fn dvrfidf_batch_noreyon(
+    py: Python<'_>,
+    u: PyReadonlyArrayDyn<f64>,
+    v: PyReadonlyArrayDyn<f64>,
+    glat: PyReadonlyArray1<f64>,
+    glon: PyReadonlyArray1<f64>,
+    iopt: i32,
+    xmsg: f64,
+    re: f64,
+) -> PyResult<(Py<PyArrayDyn<f64>>, i32)> {
+    let u = u.as_array();
+    let v = v.as_array();
+    if u.shape() != v.shape() || u.ndim() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "u and v must have the same shape with ndim>=2",
+        ));
+    }
+    let nlat = u.shape()[u.ndim() - 2];
+    let mlon = u.shape()[u.ndim() - 1];
+    let out_shape = u.shape().to_vec();
+    let batch: usize = u.shape()[..u.ndim() - 2].iter().product();
+    let stride = nlat * mlon;
+    let glat = glat.as_slice()?;
+    let glon = glon.as_slice()?;
+    let u_cow = (!u.is_standard_layout()).then(|| u.to_owned());
+    let v_cow = (!v.is_standard_layout()).then(|| v.to_owned());
+    let u_data = u_cow.as_ref().map_or_else(
+        || u.as_slice().expect("standard layout must be contiguous"),
+        |array| array.as_slice().unwrap(),
+    );
+    let v_data = v_cow.as_ref().map_or_else(
+        || v.as_slice().expect("standard layout must be contiguous"),
+        |array| array.as_slice().unwrap(),
+    );
+
+    let (out, ier) = py.detach(move || {
+        let mut out = vec![0.0; batch * stride];
+        let mut ier = 0;
+        for b in 0..batch {
+            let start = b * stride;
+            let u_view =
+                ndarray::ArrayView2::from_shape((nlat, mlon), &u_data[start..start + stride])
+                    .unwrap();
+            let v_view =
+                ndarray::ArrayView2::from_shape((nlat, mlon), &v_data[start..start + stride])
+                    .unwrap();
+            let (result, current_ier) =
+                calc_dvrfidf_core(&u_view, &v_view, glat, glon, xmsg, iopt, re);
+            out[start..start + stride].copy_from_slice(result.as_slice().unwrap());
+            if ier == 0 && current_ier != 0 {
+                ier = current_ier;
+            }
+        }
+        (out, ier)
+    });
+    let out_arr = ndarray::ArrayD::from_shape_vec(out_shape, out)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("reshape failed: {e}")))?;
     Ok((out_arr.into_pyarray(py).to_owned().into(), ier))
 }

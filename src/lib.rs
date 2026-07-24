@@ -54,12 +54,16 @@ fn easyclimate_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vibeta::dvibeta, m)?)?;
     m.add_function(wrap_pyfunction!(vibeta::dvibeta_batch, m)?)?;
     m.add_function(wrap_pyfunction!(vibeta::dvibeta_batch_sum_norm, m)?)?;
+    m.add_function(wrap_pyfunction!(vibeta::dvibeta_batch_noreyon, m)?)?;
+    m.add_function(wrap_pyfunction!(vibeta::dvibeta_batch_sum_norm_noreyon, m)?)?;
 
     //rvdv
     m.add_function(wrap_pyfunction!(rvdv::dvrfidf, m)?)?;
     m.add_function(wrap_pyfunction!(rvdv::ddvfidf, m)?)?;
     m.add_function(wrap_pyfunction!(rvdv::ddvfidf_batch, m)?)?;
     m.add_function(wrap_pyfunction!(rvdv::dvrfidf_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(rvdv::ddvfidf_batch_noreyon, m)?)?;
+    m.add_function(wrap_pyfunction!(rvdv::dvrfidf_batch_noreyon, m)?)?;
 
     Ok(())
 }

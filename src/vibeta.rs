@@ -182,6 +182,110 @@ pub fn dvibeta_batch(
     Ok((out_dyn.into(), ier_dyn.into()))
 }
 
+/// Serial batch API for callers that already provide outer parallelism (for
+/// example Dask).  The numerical results match [`dvibeta_batch`], but it does
+/// not create a Rayon thread pool.
+#[pyfunction]
+pub fn dvibeta_batch_noreyon(
+    py: Python<'_>,
+    p: PyReadonlyArray1<f64>,
+    x: PyReadonlyArrayDyn<f64>,
+    psfc: PyReadonlyArrayDyn<f64>,
+    xmsg: f64,
+    linlog: i32,
+    ptop: f64,
+) -> PyResult<(Py<PyArrayDyn<f64>>, Py<PyArrayDyn<i32>>)> {
+    let p = p.as_slice()?;
+    let nlev = p.len();
+    if nlev == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("p is empty"));
+    }
+
+    let x_slice = x
+        .as_slice()
+        .map_err(|_| pyo3::exceptions::PyTypeError::new_err("x must be C-contiguous"))?;
+    let psfc_slice = psfc
+        .as_slice()
+        .map_err(|_| pyo3::exceptions::PyTypeError::new_err("psfc must be C-contiguous"))?;
+    let x_shape = x.shape().to_vec();
+    let ps_shape = psfc.shape().to_vec();
+
+    if x_shape.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "x must have at least 1 dimension (..., nlev)",
+        ));
+    }
+    if x_shape[x_shape.len() - 1] != nlev {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "x last dimension must equal p length",
+        ));
+    }
+    if ps_shape.len() + 1 != x_shape.len() || ps_shape.iter().zip(&x_shape).any(|(ps, x)| ps != x) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "psfc shape must match x shape without last dim",
+        ));
+    }
+
+    let npoints = psfc_slice.len();
+    if npoints * nlev != x_slice.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "x size is inconsistent with psfc size and p length",
+        ));
+    }
+
+    let (out, ier_out) = py.detach(move || {
+        let mut out = vec![f64::NAN; npoints];
+        let mut ier_out = vec![0i32; npoints];
+
+        for i in 0..npoints {
+            let ps = psfc_slice[i];
+            if !(ps > ptop) {
+                ier_out[i] = -10;
+                continue;
+            }
+
+            let prof = &x_slice[i * nlev..(i + 1) * nlev];
+            let (vint, ier) = WS.with(|ws_cell| {
+                let mut ws = ws_cell.borrow_mut();
+                for k in 0..nlev {
+                    ws.prof[k] = if prof[k].is_finite() { prof[k] } else { xmsg };
+                }
+                let xsfc = if (ws.prof[0] - xmsg).abs() > 1e10 {
+                    ws.prof[0]
+                } else {
+                    0.0
+                };
+                let xbuf = ws.prof;
+                dvibeta_core_ws(
+                    p,
+                    &xbuf[..nlev],
+                    nlev as i32,
+                    xmsg,
+                    linlog,
+                    ps,
+                    xsfc,
+                    ps,
+                    ptop,
+                    ptop,
+                    &mut *ws,
+                )
+            });
+            out[i] = if ier == 0 { vint } else { f64::NAN };
+            ier_out[i] = ier;
+        }
+
+        (out, ier_out)
+    });
+
+    let out_dyn = PyArray1::<f64>::from_vec(py, out)
+        .reshape(ps_shape.clone())?
+        .to_owned();
+    let ier_dyn = PyArray1::<i32>::from_vec(py, ier_out)
+        .reshape(ps_shape)?
+        .to_owned();
+    Ok((out_dyn.into(), ier_dyn.into()))
+}
+
 // =======================
 // Internal implementation
 // =======================
@@ -705,5 +809,122 @@ pub fn dvibeta_batch_sum_norm(
     let ier_1d = PyArray1::<i32>::from_vec(py, ier_out);
     let ier_dyn = ier_1d.reshape(ps_shape)?.to_owned();
 
+    Ok((vsum_dyn.into(), vnorm_dyn.into(), ier_dyn.into()))
+}
+
+/// Serial equivalent of [`dvibeta_batch_sum_norm`].  Computation is performed
+/// with the GIL released so a caller's outer scheduler can continue running.
+#[pyfunction]
+pub fn dvibeta_batch_sum_norm_noreyon(
+    py: Python<'_>,
+    p: PyReadonlyArray1<f64>,
+    x: PyReadonlyArrayDyn<f64>,
+    psfc: PyReadonlyArrayDyn<f64>,
+    xmsg: f64,
+    linlog: i32,
+    ptop: f64,
+) -> PyResult<(
+    Py<PyArrayDyn<f64>>,
+    Py<PyArrayDyn<f64>>,
+    Py<PyArrayDyn<i32>>,
+)> {
+    let p = p.as_slice()?;
+    let nlev = p.len();
+    if nlev == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("p is empty"));
+    }
+    let x_slice = x
+        .as_slice()
+        .map_err(|_| pyo3::exceptions::PyTypeError::new_err("x must be C-contiguous"))?;
+    let psfc_slice = psfc
+        .as_slice()
+        .map_err(|_| pyo3::exceptions::PyTypeError::new_err("psfc must be C-contiguous"))?;
+    let x_shape = x.shape().to_vec();
+    let ps_shape = psfc.shape().to_vec();
+    if x_shape.is_empty() || x_shape[x_shape.len() - 1] != nlev {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "x last dimension must equal p length",
+        ));
+    }
+    if ps_shape.len() + 1 != x_shape.len()
+        || ps_shape.iter().zip(&x_shape).any(|(ps, x)| ps != x)
+        || psfc_slice.len() * nlev != x_slice.len()
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "psfc shape must match x shape without last dim",
+        ));
+    }
+
+    let npoints = psfc_slice.len();
+    let (vsum, vnorm, ier_out) = py.detach(move || {
+        let mut vsum = vec![f64::NAN; npoints];
+        let mut vnorm = vec![f64::NAN; npoints];
+        let mut ier_out = vec![0i32; npoints];
+
+        for i in 0..npoints {
+            let ps = psfc_slice[i];
+            if !(ps > ptop) {
+                ier_out[i] = -10;
+                continue;
+            }
+            let prof = &x_slice[i * nlev..(i + 1) * nlev];
+            let ((sum, sum_ier), (norm, norm_ier)) = WS.with(|ws_cell| {
+                let mut ws = ws_cell.borrow_mut();
+                for k in 0..nlev {
+                    ws.prof[k] = if prof[k].is_finite() { prof[k] } else { xmsg };
+                }
+                let xsfc = if (ws.prof[0] - xmsg).abs() > 1e10 {
+                    ws.prof[0]
+                } else {
+                    0.0
+                };
+                let xbuf = ws.prof;
+                let sum_result = dvibeta_core_ws(
+                    p,
+                    &xbuf[..nlev],
+                    nlev as i32,
+                    xmsg,
+                    linlog,
+                    ps,
+                    xsfc,
+                    ps,
+                    ptop,
+                    ptop,
+                    &mut *ws,
+                );
+                let onesbuf = ws.ones;
+                let norm_result = dvibeta_core_ws(
+                    p,
+                    &onesbuf[..nlev],
+                    nlev as i32,
+                    xmsg,
+                    linlog,
+                    ps,
+                    1.0,
+                    ps,
+                    ptop,
+                    ptop,
+                    &mut *ws,
+                );
+                (sum_result, norm_result)
+            });
+            if sum_ier == 0 && norm_ier == 0 {
+                vsum[i] = sum;
+                vnorm[i] = norm;
+            }
+            ier_out[i] = if sum_ier != 0 { sum_ier } else { norm_ier };
+        }
+        (vsum, vnorm, ier_out)
+    });
+
+    let vsum_dyn = PyArray1::<f64>::from_vec(py, vsum)
+        .reshape(ps_shape.clone())?
+        .to_owned();
+    let vnorm_dyn = PyArray1::<f64>::from_vec(py, vnorm)
+        .reshape(ps_shape.clone())?
+        .to_owned();
+    let ier_dyn = PyArray1::<i32>::from_vec(py, ier_out)
+        .reshape(ps_shape)?
+        .to_owned();
     Ok((vsum_dyn.into(), vnorm_dyn.into(), ier_dyn.into()))
 }
