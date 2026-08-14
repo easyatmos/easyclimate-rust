@@ -1,17 +1,23 @@
 [package]
 name = "easyclimate_rust"
-version = "2026.5.3"
+version = "2026.9.0"
 edition = "2024"
 
 [lib]
 name = "easyclimate_rust"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-pyo3 = { version = "0.28", features = ["extension-module"] }
+pyo3 = { version = "0.28", features = ["auto-initialize"] }
 rayon = "1.11"
 numpy = "0.28"
 ndarray = "0.17"
+nalgebra = "0.35"
+num-complex = "0.4"
+rustfft = "6.2"
+
+[features]
+extension-module = ["pyo3/extension-module"]
 
 [dev-dependencies]
 criterion = "0.5"

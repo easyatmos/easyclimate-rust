@@ -50,6 +50,9 @@ fn easyclimate_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // fastbarnes S2
     m.add_function(wrap_pyfunction!(barnes_s2::barnes_s2, m)?)?;
 
+    // gill model
+    m.add_function(wrap_pyfunction!(gill::simulate, m)?)?;
+
     //vibeta
     m.add_function(wrap_pyfunction!(vibeta::dvibeta, m)?)?;
     m.add_function(wrap_pyfunction!(vibeta::dvibeta_batch, m)?)?;
@@ -72,6 +75,7 @@ fn easyclimate_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
 mod barnes;
 mod barnes_s2;
 mod detrend_spatial;
+mod gill;
 mod interp1d;
 mod lambert;
 mod rvdv;
