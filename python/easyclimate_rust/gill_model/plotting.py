@@ -8,8 +8,28 @@ import numpy as np
 from matplotlib import animation
 
 
-def _default_levels(result: dict[str, Any]) -> np.ndarray:
-    case = str(result.get("short_name", ""))
+def _array(result: Any, name: str) -> np.ndarray:
+    """Return a result variable as a Numpy array from a dict or Dataset."""
+
+    return np.asarray(result[name])
+
+
+def _optional_array(result: Any, name: str) -> np.ndarray | None:
+    if isinstance(result, dict):
+        value = result.get(name)
+    else:
+        value = result[name] if name in result else None
+    return None if value is None else np.asarray(value)
+
+
+def _metadata(result: Any, name: str, default: Any = None) -> Any:
+    if isinstance(result, dict):
+        return result.get(name, default)
+    return result.attrs.get(name, default)
+
+
+def _default_levels(result: Any) -> np.ndarray:
+    case = str(_metadata(result, "short_name", ""))
     if case == "GaussPert":
         return np.arange(-1.0, 1.0001, 0.05)
     return np.r_[np.arange(-10.0, 0.0, 0.2), np.arange(0.2, 10.0001, 0.2)]
@@ -54,7 +74,7 @@ def _quiver_like_matlab(
 
 
 def plot_snapshot(
-    result: dict[str, Any],
+    result: Any,
     *,
     ax: plt.Axes | None = None,
     levels: np.ndarray | None = None,
@@ -63,16 +83,16 @@ def plot_snapshot(
     quiver_color: str = "k",
     title: str | None = None,
 ) -> plt.Axes:
-    """Plot the final eta contour and u/v vectors, matching MATLAB ``run.m``."""
+    """Plot a Numpy-result dictionary or xarray Dataset final state."""
 
     if ax is None:
         _, ax = plt.subplots(figsize=(8, 4.5))
 
-    x = result["x"]
-    y = result["y"]
-    eta = result["eta"]
-    u = result["u"]
-    v = result["v"]
+    x = _array(result, "x")
+    y = _array(result, "y")
+    eta = _array(result, "eta")
+    u = _array(result, "u")
+    v = _array(result, "v")
     levels = _default_levels(result) if levels is None else levels
 
     ax.contour(x, y, eta.T, levels=levels)
@@ -85,31 +105,31 @@ def plot_snapshot(
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     if title is None:
-        title = f"{result.get('case_label', '')}\nt = {result['t']:.2f}"
+        title = f"{_metadata(result, 'case_label', '')}\nt = {_metadata(result, 't'):.2f}"
     ax.set_title(title)
     return ax
 
 
 def plot_cross_sections(
-    result: dict[str, Any], *, fig: plt.Figure | None = None) -> plt.Figure:
-    """Plot the x-z and y-z cross sections used by the Gill cases."""
+    result: Any, *, fig: plt.Figure | None = None) -> plt.Figure:
+    """Plot cross sections from a Numpy-result dictionary or xarray Dataset."""
 
     if fig is None:
         fig = plt.figure(figsize=(8, 8))
 
-    x = result["x"]
-    y = result["y"]
-    z = result["z"]
-    u = result["u"]
-    v = result["v"]
-    lz = float(result["lz"])
+    x = _array(result, "x")
+    y = _array(result, "y")
+    z = _array(result, "z")
+    u = _array(result, "u")
+    v = _array(result, "v")
+    lz = float(_metadata(result, "lz"))
 
     fig.clear()
     axes = fig.subplots(3, 1)
 
     psiuw = -lz / np.pi * u.mean(axis=1)[:, None] * np.sin(np.pi / lz * z[None, :])
     axes[0].contour(x, z, psiuw.T, levels=np.arange(-0.4, 0.4001, 0.04))
-    axes[0].set_title(f"{result.get('case_label', '')}\nt = {result['t']:.2f}\nu-w")
+    axes[0].set_title(f"{_metadata(result, 'case_label', '')}\nt = {_metadata(result, 't'):.2f}\nu-w")
     axes[0].set_xlabel("x")
     axes[0].set_ylabel("z")
 
@@ -132,7 +152,7 @@ def plot_cross_sections(
 
 
 def animate(
-    result: dict[str, Any],
+    result: Any,
     *,
     nq: int = 5,
     levels: np.ndarray | None = None,
@@ -141,17 +161,17 @@ def animate(
     interval: int = 60,
     save: str | Path | None = None,
 ) -> animation.FuncAnimation:
-    """Animate saved history. Run ``simulate(..., store_every=N)`` first."""
+    """Animate a Numpy-result dictionary or xarray Dataset history."""
 
-    eta_hist = result.get("eta_history")
-    u_hist = result.get("u_history")
-    v_hist = result.get("v_history")
-    times = result.get("time")
+    eta_hist = _optional_array(result, "eta_history")
+    u_hist = _optional_array(result, "u_history")
+    v_hist = _optional_array(result, "v_history")
+    times = _optional_array(result, "time")
     if eta_hist is None or len(eta_hist) == 0:
         raise ValueError("No saved history. Re-run simulate(..., store_every=2), for example.")
 
-    x = result["x"]
-    y = result["y"]
+    x = _array(result, "x")
+    y = _array(result, "y")
     levels = _default_levels(result) if levels is None else levels
 
     fig, ax = plt.subplots(figsize=(8, 4.5))
@@ -175,7 +195,7 @@ def animate(
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         t = float(times[frame]) if times is not None and len(times) else 0.0
-        ax.set_title(f"{result.get('case_label', '')}\nt = {t:.2f}")
+        ax.set_title(f"{_metadata(result, 'case_label', '')}\nt = {t:.2f}")
         return ax.collections
 
     anim = animation.FuncAnimation(fig, draw, frames=len(eta_hist), interval=interval, blit=False)

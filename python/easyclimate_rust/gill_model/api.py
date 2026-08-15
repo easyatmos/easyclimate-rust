@@ -41,6 +41,37 @@ def _as_numpy_dict(raw: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _as_xarray_dataset(result: dict[str, Any]) -> Any:
+    """Convert a solver result to a labelled xarray dataset."""
+
+    import xarray as xr
+
+    coords = {
+        "x": result["x"],
+        "y": result["y"],
+        "z": result["z"],
+        "y_staggered": result["y"][:-1],
+    }
+    time = result["time"]
+    if time.size:
+        coords["time"] = time
+
+    data_vars = {
+        name: (("x", "y"), result[name])
+        for name in ("q", "eta", "u", "v")
+    }
+    data_vars["v_staggered"] = (("x", "y_staggered"), result["v_staggered"])
+    if time.size:
+        for name in ("eta_history", "u_history", "v_history"):
+            data_vars[name] = (("time", "x", "y"), result[name])
+
+    return xr.Dataset(
+        data_vars=data_vars,
+        coords=coords,
+        attrs={key: value for key, value in result.items() if key not in _ARRAY_KEYS},
+    )
+
+
 def simulate(
     case: str = "gill_sym",
     *,
@@ -54,7 +85,8 @@ def simulate(
     lz: float | None = None,
     damping: float | None = None,
     store_every: int = 0,
-) -> dict[str, Any]:
+    as_xarray: bool = False,
+) -> dict[str, Any] | Any:
     """Run the Gill-model solver.
 
     Parameters mirror the MATLAB script. By default, case-specific MATLAB
@@ -71,6 +103,10 @@ def simulate(
     store_every:
         Save eta/u/v snapshots every ``store_every`` steps. Use ``0`` for final
         state only.
+    as_xarray:
+        Return an :class:`xarray.Dataset` with labelled ``x``, ``y``, ``z``, and
+        (when history is saved) ``time`` dimensions. The default ``False``
+        preserves the original dictionary of Numpy arrays.
 
     Returns
     -------
@@ -92,4 +128,5 @@ def simulate(
         damping=damping,
         store_every=store_every,
     )
-    return _as_numpy_dict(raw)
+    result = _as_numpy_dict(raw)
+    return _as_xarray_dataset(result) if as_xarray else result
