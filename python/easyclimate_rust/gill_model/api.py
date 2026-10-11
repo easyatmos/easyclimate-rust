@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import xarray as xr
 
 from .. import _easyclimate_rust
 
@@ -43,27 +44,36 @@ def _as_numpy_dict(raw: dict[str, Any]) -> dict[str, Any]:
 
 def _as_xarray_dataset(result: dict[str, Any]) -> Any:
     """Convert a solver result to a labelled xarray dataset."""
-
-    import xarray as xr
-
     coords = {
         "x": result["x"],
         "y": result["y"],
         "z": result["z"],
         "y_staggered": result["y"][:-1],
     }
+
     time = result["time"]
     if time.size:
         coords["time"] = time
 
+    # Solver output: (x, y) -> xarray convention: (y, x)
     data_vars = {
-        name: (("x", "y"), result[name])
+        name: (("y", "x"), result[name].T)
         for name in ("q", "eta", "u", "v")
     }
-    data_vars["v_staggered"] = (("x", "y_staggered"), result["v_staggered"])
+
+    # (x, y_staggered) -> (y_staggered, x)
+    data_vars["v_staggered"] = (
+        ("y_staggered", "x"),
+        result["v_staggered"].T,
+    )
+
     if time.size:
+        # (time, x, y) -> (time, y, x)
         for name in ("eta_history", "u_history", "v_history"):
-            data_vars[name] = (("time", "x", "y"), result[name])
+            data_vars[name] = (
+                ("time", "y", "x"),
+                result[name].transpose(0, 2, 1),
+            )
 
     return xr.Dataset(
         data_vars=data_vars,
@@ -85,7 +95,8 @@ def simulate(
     lz: float | None = None,
     damping: float | None = None,
     store_every: int = 0,
-    as_xarray: bool = False,
+    kernel: str = "reyon",
+    as_xarray: bool = True,
 ) -> dict[str, Any] | Any:
     """Run the Gill-model solver.
 
@@ -103,6 +114,10 @@ def simulate(
     store_every:
         Save eta/u/v snapshots every ``store_every`` steps. Use ``0`` for final
         state only.
+    kernel:
+        Use ``"serial"`` for one CPU core or ``"reyon"``(default) to evaluate
+        independent zonal modes in parallel. The ``"reyon"`` kernel uses at
+        most six CPU cores.
     as_xarray:
         Return an :class:`xarray.Dataset` with labelled ``x``, ``y``, ``z``, and
         (when history is saved) ``time`` dimensions. The default ``False``
@@ -127,6 +142,7 @@ def simulate(
         lz=lz,
         damping=damping,
         store_every=store_every,
+        kernel=kernel,
     )
     result = _as_numpy_dict(raw)
     return _as_xarray_dataset(result) if as_xarray else result

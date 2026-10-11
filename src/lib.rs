@@ -51,7 +51,7 @@ fn easyclimate_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(barnes_s2::barnes_s2, m)?)?;
 
     // gill model
-    m.add_function(wrap_pyfunction!(gill::simulate, m)?)?;
+    m.add_function(wrap_pyfunction!(gill::gill_simulate, m)?)?;
 
     //vibeta
     m.add_function(wrap_pyfunction!(vibeta::dvibeta, m)?)?;
