@@ -49,10 +49,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Intel / x86_64
-          - runner: macos-15-intel
-            artifact-name: dist-macos-x86_64
-
           # Apple Silicon / arm64
           - runner: macos-15
             artifact-name: dist-macos-arm64
