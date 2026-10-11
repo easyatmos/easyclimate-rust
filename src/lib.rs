@@ -50,16 +50,23 @@ fn easyclimate_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // fastbarnes S2
     m.add_function(wrap_pyfunction!(barnes_s2::barnes_s2, m)?)?;
 
+    // gill model
+    m.add_function(wrap_pyfunction!(gill::gill_simulate, m)?)?;
+
     //vibeta
     m.add_function(wrap_pyfunction!(vibeta::dvibeta, m)?)?;
     m.add_function(wrap_pyfunction!(vibeta::dvibeta_batch, m)?)?;
     m.add_function(wrap_pyfunction!(vibeta::dvibeta_batch_sum_norm, m)?)?;
+    m.add_function(wrap_pyfunction!(vibeta::dvibeta_batch_noreyon, m)?)?;
+    m.add_function(wrap_pyfunction!(vibeta::dvibeta_batch_sum_norm_noreyon, m)?)?;
 
     //rvdv
     m.add_function(wrap_pyfunction!(rvdv::dvrfidf, m)?)?;
     m.add_function(wrap_pyfunction!(rvdv::ddvfidf, m)?)?;
     m.add_function(wrap_pyfunction!(rvdv::ddvfidf_batch, m)?)?;
     m.add_function(wrap_pyfunction!(rvdv::dvrfidf_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(rvdv::ddvfidf_batch_noreyon, m)?)?;
+    m.add_function(wrap_pyfunction!(rvdv::dvrfidf_batch_noreyon, m)?)?;
 
     Ok(())
 }
@@ -68,6 +75,7 @@ fn easyclimate_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
 mod barnes;
 mod barnes_s2;
 mod detrend_spatial;
+mod gill;
 mod interp1d;
 mod lambert;
 mod rvdv;

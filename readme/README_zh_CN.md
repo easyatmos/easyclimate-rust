@@ -1,4 +1,4 @@
-<img src="https://github.com/shenyulu/easyclimate-rust/blob/main/docs/logo/easyclimate_rust_logo_mini.png?raw=true" alt="easyclimate-rust">
+<img src="https://github.com/easyatmos/easyclimate-rust/blob/main/docs/logo/easyclimate_rust_logo_mini.png?raw=true" alt="easyclimate-rust">
 
 <h2 align="center">easyclimate 的 Rust 后端</h2>
 
@@ -13,7 +13,7 @@
 ## 🤗 easyclimate-rust 是什么？
 
 **easyclimate-rust** 是一个使用 Rust 编写的高性能后端库，旨在为
-[easyclimate](https://github.com/shenyulu/easyclimate)
+[easyclimate](https://github.com/easyatmos/easyclimate)
 提供计算密集型任务的支持。
 
 通过充分利用 Rust 的 **高性能**、**内存安全性** 以及 **零成本抽象**，
