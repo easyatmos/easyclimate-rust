@@ -1,4 +1,4 @@
-<img src="https://github.com/shenyulu/easyclimate-rust/blob/main/docs/logo/easyclimate_rust_logo_mini.png?raw=true" alt="easyclimate-rust">
+<img src="https://github.com/easyatmos/easyclimate-rust/blob/main/docs/logo/easyclimate_rust_logo_mini.png?raw=true" alt="easyclimate-rust">
 
 <h2 align="center">easyclimate の Rust バックエンド</h2>
 
@@ -16,7 +16,7 @@
 ## 🤗 easyclimate-rust とは？
 
 **easyclimate-rust** は Rust で実装された高性能バックエンドライブラリであり、
-[easyclimate](https://github.com/shenyulu/easyclimate)
+[easyclimate](https://github.com/easyatmos/easyclimate)
 における計算負荷の高い処理を担うことを目的としています。
 
 Rust の **高い実行性能**、**メモリ安全性**、および **ゼロコスト抽象化** を活用することで、

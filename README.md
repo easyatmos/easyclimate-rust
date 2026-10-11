@@ -1,4 +1,4 @@
-<img src="https://github.com/shenyulu/easyclimate-rust/blob/main/docs/logo/easyclimate_rust_logo_mini.png?raw=true" alt="easyclimate-rust">
+<img src="https://github.com/easyatmos/easyclimate-rust/blob/main/docs/logo/easyclimate_rust_logo_mini.png?raw=true" alt="easyclimate-rust">
 
 <h2 align="center">The Rust backend of easyclimate</h2>
 
@@ -13,7 +13,7 @@
 ## 🤗 What is easyclimate-rust?
 
 **easyclimate-rust** is a high-performance backend library written in Rust, designed to handle computationally intensive tasks for
-[easyclimate](https://github.com/shenyulu/easyclimate).
+[easyclimate](https://github.com/easyatmos/easyclimate).
 
 By leveraging Rust’s **high performance**, **memory safety**, and **zero-cost abstractions**,
 easyclimate-rust enables the Python front-end to provide a clean, user-friendly interface for climate data analysis,
