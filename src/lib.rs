@@ -12,6 +12,7 @@ fn easyclimate_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     //wet_bulb module
     m.add_function(wrap_pyfunction!(wet_bulb::calc_wet_bulb_temperature, m)?)?;
+    m.add_function(wrap_pyfunction!(wet_bulb::calc_wet_bulb_temperature_checked, m)?)?;
 
     // sphere_laplacian module (NumPy interface)
     m.add_function(wrap_pyfunction!(
