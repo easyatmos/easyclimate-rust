@@ -2,8 +2,19 @@ repos:
   - repo: local
     hooks:
       - id: cargo-fmt
-        name: cargo fmt
-        entry: cargo fmt --all
+        name: cargo fmt (check)
+        entry: cargo fmt --all -- --check
         language: system
         pass_filenames: false
-        files: ^src/.*\.rs$
+        files: &rust_files >-
+          (?x)
+          \.rs$ |
+          (^|/)(Cargo\.(toml|lock)|\.?(rustfmt|clippy)\.toml|rust-toolchain(\.toml)?)$ |
+          (^|/)\.cargo/config(\.toml)?$ |
+          ^\.pre-commit-config\.yaml$
+      - id: cargo-check
+        name: cargo check --all-targets
+        entry: cargo check --all-targets
+        language: system
+        pass_filenames: false
+        files: *rust_files

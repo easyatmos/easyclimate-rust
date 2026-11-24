@@ -5,10 +5,22 @@ use numpy::{
 use pyo3::prelude::*;
 use rayon::prelude::*;
 use std::cell::RefCell;
+use std::cmp::Ordering;
+
+type BatchIntegral = (Py<PyArrayDyn<f64>>, Py<PyArrayDyn<i32>>);
+type BatchIntegralAndNormalization = (
+    Py<PyArrayDyn<f64>>,
+    Py<PyArrayDyn<f64>>,
+    Py<PyArrayDyn<i32>>,
+);
 
 /// Port of Fortran DVIBETA (double precision) from vibeta_dp.f
 /// Returns (vint, ier) for a single profile
 #[pyfunction]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserves the existing Python call signature"
+)]
 pub fn dvibeta(
     p: PyReadonlyArray1<f64>,
     x: PyReadonlyArray1<f64>,
@@ -31,7 +43,7 @@ pub fn dvibeta(
     let (vint, ier) = WS.with(|ws| {
         let mut ws = ws.borrow_mut();
         dvibeta_core_ws(
-            p, x, nlev, xmsg, linlog, psfc, xsfc, pbot, ptop, plvcrt, &mut *ws,
+            p, x, nlev, xmsg, linlog, psfc, xsfc, pbot, ptop, plvcrt, &mut ws,
         )
     });
 
@@ -59,7 +71,7 @@ pub fn dvibeta_batch(
     xmsg: f64,
     linlog: i32,
     ptop: f64,
-) -> PyResult<(Py<PyArrayDyn<f64>>, Py<PyArrayDyn<i32>>)> {
+) -> PyResult<BatchIntegral> {
     let p = p.as_slice()?;
     let nlev = p.len();
     if nlev == 0 {
@@ -121,7 +133,7 @@ pub fn dvibeta_batch(
         .enumerate()
         .for_each(|(i, (out_i, ier_i))| {
             let ps = psfc_slice[i];
-            if !(ps > ptop) {
+            if ps.partial_cmp(&ptop) != Some(Ordering::Greater) {
                 *out_i = f64::NAN;
                 *ier_i = -10;
                 return;
@@ -134,8 +146,7 @@ pub fn dvibeta_batch(
                 let mut ws = ws_cell.borrow_mut();
 
                 // copy profile into workspace buffer, replace NaN/Inf
-                for k in 0..nlev {
-                    let v = prof[k];
+                for (k, &v) in prof.iter().enumerate() {
                     ws.prof[k] = if v.is_finite() { v } else { xmsg };
                 }
 
@@ -159,7 +170,7 @@ pub fn dvibeta_batch(
                     ps,
                     ptop,
                     ptop,
-                    &mut *ws,
+                    &mut ws,
                 )
             });
 
@@ -194,7 +205,7 @@ pub fn dvibeta_batch_noreyon(
     xmsg: f64,
     linlog: i32,
     ptop: f64,
-) -> PyResult<(Py<PyArrayDyn<f64>>, Py<PyArrayDyn<i32>>)> {
+) -> PyResult<BatchIntegral> {
     let p = p.as_slice()?;
     let nlev = p.len();
     if nlev == 0 {
@@ -239,7 +250,7 @@ pub fn dvibeta_batch_noreyon(
 
         for i in 0..npoints {
             let ps = psfc_slice[i];
-            if !(ps > ptop) {
+            if ps.partial_cmp(&ptop) != Some(Ordering::Greater) {
                 ier_out[i] = -10;
                 continue;
             }
@@ -247,8 +258,8 @@ pub fn dvibeta_batch_noreyon(
             let prof = &x_slice[i * nlev..(i + 1) * nlev];
             let (vint, ier) = WS.with(|ws_cell| {
                 let mut ws = ws_cell.borrow_mut();
-                for k in 0..nlev {
-                    ws.prof[k] = if prof[k].is_finite() { prof[k] } else { xmsg };
+                for (k, &v) in prof.iter().enumerate() {
+                    ws.prof[k] = if v.is_finite() { v } else { xmsg };
                 }
                 let xsfc = if (ws.prof[0] - xmsg).abs() > 1e10 {
                     ws.prof[0]
@@ -267,7 +278,7 @@ pub fn dvibeta_batch_noreyon(
                     ps,
                     ptop,
                     ptop,
-                    &mut *ws,
+                    &mut ws,
                 )
             });
             out[i] = if ier == 0 { vint } else { f64::NAN };
@@ -353,6 +364,10 @@ fn aint(v: f64) -> f64 {
 }
 
 #[inline]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Caller-owned scratch slices allow reuse without borrowing the whole workspace"
+)]
 fn dint2p2_ws(
     pin: &[f64],
     xin: &[f64],
@@ -371,7 +386,7 @@ fn dint2p2_ws(
     if npin < 1 || npout < 1 {
         ier += 1;
     }
-    if iflag < 1 || iflag > 2 {
+    if !(1..=2).contains(&iflag) {
         ier += 10;
     }
     if npin > NMAX {
@@ -441,6 +456,10 @@ fn dint2p2_ws(
     0
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Keeps the Fortran routine's scalar parameters explicit while reusing a workspace"
+)]
 fn dvibeta_core_ws(
     p_in: &[f64],
     x_in: &[f64],
@@ -505,12 +524,12 @@ fn dvibeta_core_ws(
     }
 
     if nlmax < (nlev as usize) {
-        for nl in nlx..(nlev as usize) {
+        for &p in &p_in[nlx..nlev as usize] {
             nll += 1;
             if nll >= KLVL {
                 return (xmsg, 9_999_998);
             }
-            ws.pp[nll] = p_in[nl];
+            ws.pp[nll] = p;
             ws.xx[nll] = 0.0;
         }
         nlmax = nll;
@@ -591,7 +610,7 @@ fn dvibeta_core_ws(
             nltop_idx = nl;
         }
     }
-    if nltop_idx == 0 || (nltop_idx % 2 == 0) {
+    if nltop_idx.is_multiple_of(2) {
         return (xmsg, 8_888_888);
     }
 
@@ -615,9 +634,7 @@ fn dvibeta_core_ws(
     if ier2 != 0 {
         return (xmsg, ier2);
     }
-    for i in 1..=nltop_idx {
-        ws.xi[i] = xout_slice[i - 1];
-    }
+    ws.xi[1..=nltop_idx].copy_from_slice(xout_slice);
 
     ws.delp.fill(0.0);
     ws.beta.fill(0.0);
@@ -660,11 +677,7 @@ pub fn dvibeta_batch_sum_norm(
     xmsg: f64,
     linlog: i32,
     ptop: f64,
-) -> PyResult<(
-    Py<PyArrayDyn<f64>>,
-    Py<PyArrayDyn<f64>>,
-    Py<PyArrayDyn<i32>>,
-)> {
+) -> PyResult<BatchIntegralAndNormalization> {
     let p = p.as_slice()?;
     let nlev = p.len();
     if nlev == 0 {
@@ -723,7 +736,7 @@ pub fn dvibeta_batch_sum_norm(
         .enumerate()
         .for_each(|(i, ((vsum_i, vnorm_i), ier_i))| {
             let ps = psfc_slice[i];
-            if !(ps > ptop) {
+            if ps.partial_cmp(&ptop) != Some(Ordering::Greater) {
                 *vsum_i = f64::NAN;
                 *vnorm_i = f64::NAN;
                 *ier_i = -10;
@@ -737,8 +750,7 @@ pub fn dvibeta_batch_sum_norm(
                 let mut ws = ws_cell.borrow_mut();
 
                 // ---- prepare x profile (replace NaN/Inf with xmsg) ----
-                for k in 0..nlev {
-                    let v = prof[k];
+                for (k, &v) in prof.iter().enumerate() {
                     ws.prof[k] = if v.is_finite() { v } else { xmsg };
                 }
 
@@ -762,7 +774,7 @@ pub fn dvibeta_batch_sum_norm(
                     ps, // pbot
                     ptop,
                     ptop, // plvcrt
-                    &mut *ws,
+                    &mut ws,
                 );
 
                 // ---- normalization profile = constant 1 (same as ones_like) ----
@@ -781,7 +793,7 @@ pub fn dvibeta_batch_sum_norm(
                     ps,  // pbot
                     ptop,
                     ptop, // plvcrt
-                    &mut *ws,
+                    &mut ws,
                 );
 
                 (s_res, n_res)
@@ -823,11 +835,7 @@ pub fn dvibeta_batch_sum_norm_noreyon(
     xmsg: f64,
     linlog: i32,
     ptop: f64,
-) -> PyResult<(
-    Py<PyArrayDyn<f64>>,
-    Py<PyArrayDyn<f64>>,
-    Py<PyArrayDyn<i32>>,
-)> {
+) -> PyResult<BatchIntegralAndNormalization> {
     let p = p.as_slice()?;
     let nlev = p.len();
     if nlev == 0 {
@@ -863,15 +871,15 @@ pub fn dvibeta_batch_sum_norm_noreyon(
 
         for i in 0..npoints {
             let ps = psfc_slice[i];
-            if !(ps > ptop) {
+            if ps.partial_cmp(&ptop) != Some(Ordering::Greater) {
                 ier_out[i] = -10;
                 continue;
             }
             let prof = &x_slice[i * nlev..(i + 1) * nlev];
             let ((sum, sum_ier), (norm, norm_ier)) = WS.with(|ws_cell| {
                 let mut ws = ws_cell.borrow_mut();
-                for k in 0..nlev {
-                    ws.prof[k] = if prof[k].is_finite() { prof[k] } else { xmsg };
+                for (k, &v) in prof.iter().enumerate() {
+                    ws.prof[k] = if v.is_finite() { v } else { xmsg };
                 }
                 let xsfc = if (ws.prof[0] - xmsg).abs() > 1e10 {
                     ws.prof[0]
@@ -890,7 +898,7 @@ pub fn dvibeta_batch_sum_norm_noreyon(
                     ps,
                     ptop,
                     ptop,
-                    &mut *ws,
+                    &mut ws,
                 );
                 let onesbuf = ws.ones;
                 let norm_result = dvibeta_core_ws(
@@ -904,7 +912,7 @@ pub fn dvibeta_batch_sum_norm_noreyon(
                     ps,
                     ptop,
                     ptop,
-                    &mut *ws,
+                    &mut ws,
                 );
                 (sum_result, norm_result)
             });

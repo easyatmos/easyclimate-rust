@@ -40,13 +40,8 @@ fn dist_s2_deg(lon0: f64, lat0: f64, lon1: f64, lat1: f64) -> f64 {
     let lat0r = lat0 * RAD_PER_DEG;
     let lat1r = lat1 * RAD_PER_DEG;
     let dlon = (lon1 - lon0) * RAD_PER_DEG;
-    let mut arg = lat0r.sin() * lat1r.sin() + lat0r.cos() * lat1r.cos() * dlon.cos();
-    if arg > 1.0 {
-        arg = 1.0;
-    } else if arg < -1.0 {
-        arg = -1.0;
-    }
-    arg.acos() / RAD_PER_DEG
+    let arg = lat0r.sin() * lat1r.sin() + lat0r.cos() * lat1r.cos() * dlon.cos();
+    arg.clamp(-1.0, 1.0).acos() / RAD_PER_DEG
 }
 
 fn to_vec_len2_f64(name: &str, v: Vec<f64>) -> PyResult<[f64; 2]> {
@@ -93,7 +88,7 @@ fn interpolate_naive_s2(
     // parallelize over rows
     out.par_chunks_mut(nx).enumerate().for_each(|(j, row)| {
         let yc = x0.1 + j as f64 * step.1;
-        for i in 0..nx {
+        for (i, cell) in row.iter_mut().enumerate() {
             let xc = x0.0 + i as f64 * step.0;
 
             let mut wsum = 0.0f64;
@@ -108,11 +103,11 @@ fn interpolate_naive_s2(
                 vsum += w * val[k];
             }
 
-            if wsum > 0.0 {
-                row[i] = (vsum / wsum + offset) as f32;
+            *cell = if wsum > 0.0 {
+                (vsum / wsum + offset) as f32
             } else {
-                row[i] = f32::NAN;
-            }
+                f32::NAN
+            };
         }
     });
 
@@ -122,6 +117,10 @@ fn interpolate_naive_s2(
 // -----------------------------
 // optimized_convolution_S2
 // -----------------------------
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The kernel takes explicit grid, weighting, and projection settings"
+)]
 fn interpolate_opt_convol_s2(
     pts: &ArrayView2<f64>, // (N,2) lon,lat
     val: Vec<f64>,
@@ -235,6 +234,10 @@ fn interpolate_opt_convol_s2(
     lambert_grid=None,
     auto_proj=true
 ))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserves the existing Python call signature"
+)]
 pub fn barnes_s2<'py>(
     py: Python<'py>,
     pts: PyReadonlyArray2<f64>,

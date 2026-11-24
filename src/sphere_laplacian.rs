@@ -257,7 +257,7 @@ pub fn calc_sphere_laplacian_numpy<'py>(
 
     let result_flat = calculator
         .compute_flat(&t_flat, lat_slice, lon_slice, cyclic_boundary)
-        .map_err(|e| PyValueError::new_err(e))?;
+        .map_err(PyValueError::new_err)?;
 
     // 转换回 2D NumPy 数组
     let result_vec2d: Vec<Vec<f64>> = result_flat
@@ -292,7 +292,7 @@ pub fn calc_sphere_laplacian_conservative_numpy<'py>(
 
     let result_flat = calculator
         .compute_conservative_flat(&t_flat, lat_slice, lon_slice, cyclic_boundary)
-        .map_err(|e| PyValueError::new_err(e))?;
+        .map_err(PyValueError::new_err)?;
 
     let result_vec2d: Vec<Vec<f64>> = result_flat
         .chunks(nlon)

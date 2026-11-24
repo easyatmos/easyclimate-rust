@@ -458,6 +458,10 @@ fn calc_ddvfidf_core(
 }
 
 #[pyfunction]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserves the existing Python call signature"
+)]
 pub fn dvrfidf(
     py: Python<'_>,
     u: PyReadonlyArray2<f64>,
@@ -481,6 +485,10 @@ pub fn dvrfidf(
 }
 
 #[pyfunction]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserves the existing Python call signature"
+)]
 pub fn ddvfidf(
     py: Python<'_>,
     u: PyReadonlyArray2<f64>,
@@ -504,6 +512,10 @@ pub fn ddvfidf(
 }
 
 #[pyfunction]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserves the existing Python call signature"
+)]
 pub fn ddvfidf_batch(
     py: Python<'_>,
     u: PyReadonlyArrayDyn<f64>, // (..., nlat, mlon)
@@ -594,6 +606,10 @@ pub fn ddvfidf_batch(
 
 /// Serial batch divergence for callers that provide outer parallelism.
 #[pyfunction]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserves the existing Python call signature"
+)]
 pub fn ddvfidf_batch_noreyon(
     py: Python<'_>,
     u: PyReadonlyArrayDyn<f64>,
@@ -655,6 +671,10 @@ pub fn ddvfidf_batch_noreyon(
 }
 
 #[pyfunction]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserves the existing Python call signature"
+)]
 pub fn dvrfidf_batch(
     py: Python<'_>,
     u: PyReadonlyArrayDyn<f64>,
@@ -745,6 +765,10 @@ pub fn dvrfidf_batch(
 
 /// Serial batch vorticity for callers that provide outer parallelism.
 #[pyfunction]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserves the existing Python call signature"
+)]
 pub fn dvrfidf_batch_noreyon(
     py: Python<'_>,
     u: PyReadonlyArrayDyn<f64>,

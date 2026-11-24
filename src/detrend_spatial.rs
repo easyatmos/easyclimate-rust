@@ -160,7 +160,7 @@ pub fn calc_detrend_spatial_3d_chunked<'py>(
 
     // Process in chunks for better cache performance
     let total_points = nlat * nlon;
-    let num_chunks = (total_points + chunk_size - 1) / chunk_size;
+    let num_chunks = total_points.div_ceil(chunk_size);
 
     for chunk_idx in 0..num_chunks {
         let start_idx = chunk_idx * chunk_size;
