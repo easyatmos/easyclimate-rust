@@ -100,6 +100,9 @@ pub fn half_kernel_size_opt_scalar(
     Ok(half.max(0) as usize)
 }
 
+/// The projected grid origin and dimensions.
+type LambertGrid = ((f64, f64), (usize, usize));
+
 /// 对应 python _infer_lambert_grid: Project the four corners and expand by min/max + margin_steps: contentReference[oaicite:17]{index=17}
 pub fn infer_lambert_grid(
     x0: (f64, f64),
@@ -107,7 +110,7 @@ pub fn infer_lambert_grid(
     size: (usize, usize),
     proj: &LambertProj,
     margin_steps: usize,
-) -> Result<((f64, f64), (usize, usize)), String> {
+) -> Result<LambertGrid, String> {
     let lon0 = x0.0;
     let lon1 = x0.0 + (size.0 as f64 - 1.0) * step.0;
     let lat0 = x0.1;

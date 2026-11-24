@@ -15,9 +15,6 @@ const DEFAULT_LX: f64 = 12.0 * PI;
 const DEFAULT_LZ: f64 = PI;
 const DEFAULT_E: f64 = 0.1;
 const DEFAULT_NT: usize = 500;
-const DEFAULT_NY: usize = 60;
-const DEFAULT_NX: usize = 128;
-const DEFAULT_NZ: usize = 20;
 const MAX_RAYON_THREADS: usize = 6;
 const TRANSFORM_CACHE_CAPACITY: usize = 8;
 
@@ -333,10 +330,10 @@ fn transforms_for(cfg: &Config) -> PyResult<Arc<Vec<TransformSet>>> {
     if let Some(existing) = cache.entries.get(&key) {
         return Ok(Arc::clone(existing));
     }
-    if cache.entries.len() >= TRANSFORM_CACHE_CAPACITY {
-        if let Some(evicted_key) = cache.insertion_order.pop_front() {
-            cache.entries.remove(&evicted_key);
-        }
+    if cache.entries.len() >= TRANSFORM_CACHE_CAPACITY
+        && let Some(evicted_key) = cache.insertion_order.pop_front()
+    {
+        cache.entries.remove(&evicted_key);
     }
     cache.insertion_order.push_back(key.clone());
     cache.entries.insert(key, Arc::clone(&transforms));
@@ -594,6 +591,10 @@ fn v_to_eta_grid(v_raw: &[f64], nx: usize, ny: usize) -> Vec<f64> {
     out
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Resolves the individual Python configuration arguments and applies case-specific defaults"
+)]
 fn build_config(
     case_name: &str,
     t: Option<f64>,
@@ -797,6 +798,10 @@ fn reyon_thread_pool() -> PyResult<&'static rayon::ThreadPool> {
     store_every = 0,
     kernel = "serial"
 ))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserves the existing Python call signature"
+)]
 pub fn gill_simulate(
     py: Python<'_>,
     case: &str,
@@ -1130,9 +1135,9 @@ mod tests {
         let fwd = fft_along_x(&data, nx, ncols);
         assert_close(fwd[0].re, 3.0 * nx as f64, 1e-12);
         assert_close(fwd[0].im, 0.0, 1e-12);
-        for i in 1..nx {
-            assert_close(fwd[i].re, 0.0, 1e-12);
-            assert_close(fwd[i].im, 0.0, 1e-12);
+        for value in &fwd[1..nx] {
+            assert_close(value.re, 0.0, 1e-12);
+            assert_close(value.im, 0.0, 1e-12);
         }
     }
 
@@ -1668,9 +1673,9 @@ mod tests {
             .unwrap();
             let bound = result.bind(py);
             let q: Vec<Vec<f64>> = bound.get_item("q").unwrap().unwrap().extract().unwrap();
-            for i in 0..nx {
+            for row in &q[..nx] {
                 for j in 0..(ny + 1) {
-                    assert_close(q[i][j], q[i][ny - j], 1e-12);
+                    assert_close(row[j], row[ny - j], 1e-12);
                 }
             }
         });

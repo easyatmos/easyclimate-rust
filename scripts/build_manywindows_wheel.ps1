@@ -1,6 +1,6 @@
 # build_manywindows_wheel.ps1
 
-$pythonVersions = @("3.10", "3.11", "3.12", "3.13", "3.14")
+$pythonVersions = @("3.10", "3.11", "3.12", "3.13", "3.14", "3.15")
 
 # 清理函数
 function Clean-BuildArtifacts {

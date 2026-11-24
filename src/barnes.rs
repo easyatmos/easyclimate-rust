@@ -45,10 +45,10 @@ fn py_to_vec_f64<'py>(obj: &Bound<'py, PyAny>, dim: usize, name: &str) -> PyResu
 
 fn py_to_size<'py>(obj: &Bound<'py, PyAny>, dim: usize) -> PyResult<Vec<usize>> {
     // Python: if dim==1, can be scalar; else must be array-like
-    if dim == 1 {
-        if let Ok(n) = obj.extract::<usize>() {
-            return Ok(vec![n]);
-        }
+    if dim == 1
+        && let Ok(n) = obj.extract::<usize>()
+    {
+        return Ok(vec![n]);
     }
     let v = obj.extract::<Vec<usize>>().map_err(|_| {
         PyRuntimeError::new_err(format!(
@@ -417,11 +417,10 @@ fn product_conv_scale_factor_convolution(
 ) -> f64 {
     // kernel_size**num_iter / sqrt(2*pi) / (sigma/step) then product, then * max_dist_weight
     // matches :contentReference[oaicite:6]{index=6} :contentReference[oaicite:7]{index=7}
-    let ni = num_iter as i32;
     let mut p = 1.0;
     for m in 0..sigma.len() {
         let ks = kernel_size[m] as f64;
-        let term = ks.powi(ni) / ((2.0 * PI).sqrt()) / (sigma[m] / step[m]);
+        let term = ks.powi(num_iter) / ((2.0 * PI).sqrt()) / (sigma[m] / step[m]);
         p *= term;
     }
     p * max_dist_weight
@@ -437,11 +436,10 @@ fn product_conv_scale_factor_opt(
 ) -> f64 {
     // (kernel_size + 2*tail_value)**num_iter / sqrt(2*pi) / (sigma/step) product * max_dist_weight
     // matches :contentReference[oaicite:8]{index=8} :contentReference[oaicite:9]{index=9}
-    let ni = num_iter as i32;
     let mut p = 1.0;
     for m in 0..sigma.len() {
         let base = (kernel_size[m] as f64) + 2.0 * tail_value[m];
-        let term = base.powi(ni) / ((2.0 * PI).sqrt()) / (sigma[m] / step[m]);
+        let term = base.powi(num_iter) / ((2.0 * PI).sqrt()) / (sigma[m] / step[m]);
         p *= term;
     }
     p * max_dist_weight
@@ -451,6 +449,10 @@ fn product_conv_scale_factor_opt(
 // algorithm B: convolution (no tail)
 // --------------------------------------
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The kernel takes the observations, grid geometry, and convolution settings separately"
+)]
 fn interpolate_convolution(
     pts: &[(f64, f64, f64)],
     mut val: Vec<f64>,
@@ -667,6 +669,10 @@ fn interpolate_convolution(
 // algorithm B (optimized): convolution + tail
 // --------------------------------------
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The kernel is shared with the spherical interpolator and takes explicit grid and convolution settings"
+)]
 pub(crate) fn interpolate_opt_convolution(
     pts: &[(f64, f64, f64)],
     mut val: Vec<f64>,
@@ -957,8 +963,7 @@ fn interpolate_naive(
     let scale: Vec<f64> = sigma.iter().map(|&s| 2.0 * s * s).collect();
 
     if dim == 1 {
-        let nx = size[0];
-        for i in 0..nx {
+        for (i, cell) in out.iter_mut().enumerate() {
             let xc = x0[0] + (i as f64) * step[0];
             let mut ws = 0.0;
             let mut wt = 0.0;
@@ -968,7 +973,7 @@ fn interpolate_naive(
                 ws += w * val[k];
                 wt += w;
             }
-            out[i] = if wt > 0.0 {
+            *cell = if wt > 0.0 {
                 (ws / wt + offset) as f32
             } else {
                 f32::NAN
@@ -1148,6 +1153,10 @@ impl KdTree2D {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The kernel takes the observations, grid geometry, and radius weighting settings separately"
+)]
 fn interpolate_radius_2d(
     pts: &[(f64, f64, f64)],
     mut val: Vec<f64>,
@@ -1199,7 +1208,7 @@ fn interpolate_radius_2d(
         // Each thread/reuse the neighbor buffer per line to avoid frequent allocation.
         let mut neigh: Vec<(usize, f64)> = Vec::new();
 
-        for i in 0..nx {
+        for (i, cell) in row.iter_mut().enumerate() {
             let xc = x0[0] + (i as f64) * step[0];
 
             kdtree.radius_search(xc, yc, radius_sqr, &mut neigh);
@@ -1213,7 +1222,7 @@ fn interpolate_radius_2d(
                 wt += w;
             }
 
-            row[i] = if wt >= max_dist_weight {
+            *cell = if wt >= max_dist_weight {
                 (ws / wt + offset) as f32
             } else {
                 f32::NAN
@@ -1228,6 +1237,10 @@ fn interpolate_radius_2d(
 // public PyO3 API: barnes
 // --------------------------------------
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserves the existing Python call signature"
+)]
 #[pyfunction]
 #[pyo3(signature = (pts, val, sigma, x0, step, size, method="optimized_convolution", num_iter=4, max_dist=3.5, min_weight=0.001))]
 pub fn barnes<'py>(
@@ -1256,7 +1269,7 @@ pub fn barnes<'py>(
         }
     };
 
-    if dim < 1 || dim > 3 {
+    if !(1..=3).contains(&dim) {
         return Err(PyRuntimeError::new_err(
             "Barnes interpolation supports only dimensions 1, 2 or 3",
         ));
@@ -1407,10 +1420,10 @@ pub fn radius_mask_2d<'py>(
 
         let mut neigh: Vec<(usize, f64)> = Vec::new();
 
-        for i in 0..nx {
+        for (i, cell) in row.iter_mut().enumerate() {
             let xc = x0x + (i as f64) * sx;
             kdtree.radius_search(xc, yc, radius_sqr, &mut neigh);
-            row[i] = !neigh.is_empty();
+            *cell = !neigh.is_empty();
         }
     });
 
