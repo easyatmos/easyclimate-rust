@@ -605,8 +605,8 @@ fn dvibeta_core_ws(
     ws.pi[i_last_even] = 0.5 * (ws.pp[nlmax] + zero);
 
     let mut nltop_idx: usize = 0;
-    for nl in 1..=(2 * nlmax - 1) {
-        if aint(ws.pi[nl]) == aint(ptop) {
+    for (nl, &pressure) in ws.pi[..=i_last_odd].iter().enumerate().skip(1) {
+        if aint(pressure) == aint(ptop) {
             nltop_idx = nl;
         }
     }
